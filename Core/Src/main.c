@@ -32,6 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define WaitTimeMilliseconds 0
 
 /* USER CODE END PD */
 
@@ -44,10 +45,12 @@
 UART_HandleTypeDef huart1;
 
 osThreadId defaultTaskHandle;
-osThreadId Task02Handle;
+osThreadId GreenLEDTaskHandle;
+osThreadId RedLEDTaskHandle;
+osThreadId YellowLEDTaskHandle;
 osSemaphoreId CriticalResourceSemaphoreHandle;
 /* USER CODE BEGIN PV */
-
+volatile uint8_t startFlag = 1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,7 +58,9 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 void StartDefaultTask(void const * argument);
-void StartTask02(void const * argument);
+void green_led(void const * argument);
+void red_led(void const * argument);
+void yellow_led(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -129,9 +134,17 @@ int main(void)
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-  /* definition and creation of Task02 */
-  osThreadDef(Task02, StartTask02, osPriorityIdle, 0, 128);
-  Task02Handle = osThreadCreate(osThread(Task02), NULL);
+  /* definition and creation of GreenLEDTask */
+  osThreadDef(GreenLEDTask, green_led, osPriorityNormal, 0, 128);
+  GreenLEDTaskHandle = osThreadCreate(osThread(GreenLEDTask), NULL);
+
+  /* definition and creation of RedLEDTask */
+  osThreadDef(RedLEDTask, red_led, osPriorityNormal, 0, 128);
+  RedLEDTaskHandle = osThreadCreate(osThread(RedLEDTask), NULL);
+
+  /* definition and creation of YellowLEDTask */
+  osThreadDef(YellowLEDTask, yellow_led, osPriorityAboveNormal, 0, 128);
+  YellowLEDTaskHandle = osThreadCreate(osThread(YellowLEDTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -235,18 +248,17 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, LED1_Pin|LED2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LED1_Pin|LED2_Pin|LED3_Pin|LED4_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : LED1_Pin LED2_Pin */
-  GPIO_InitStruct.Pin = LED1_Pin|LED2_Pin;
+  /*Configure GPIO pins : LED1_Pin LED2_Pin LED3_Pin LED4_Pin */
+  GPIO_InitStruct.Pin = LED1_Pin|LED2_Pin|LED3_Pin|LED4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -269,79 +281,108 @@ void StartDefaultTask(void const * argument)
   /* Infinite loop */
 	for(;;)
 	  {
-	    // Coba untuk mendapatkan semaphore (timeout = 100 ms)
-	    if(osSemaphoreWait(CriticalResourceSemaphoreHandle, 100) == osOK)
-	    {
-	      // Mengakses resource kritis
-	      printf("Task sedang mengakses resource kritis...\n");
-
-	      // Nyalakan LED1 untuk menunjukkan akses berhasil
-	      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);  // LED1 ON (Berhasil)
-
-	      // Simulasi penggunaan resource kritis
-	      HAL_Delay(1000);
-
-	      // Selesai mengakses, lepaskan semaphore
-	      osSemaphoreRelease(CriticalResourceSemaphoreHandle);
-
-	      // Matikan LED1 setelah akses selesai
-	      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);  // LED1 OFF
-
-	      printf("Task selesai mengakses resource kritis.\n");
-	    }
-	    else
-	    {
-	      // Gagal mendapatkan semaphore (timeout habis)
-	      printf("Task gagal mendapatkan akses ke resource kritis (timeout).\n");
-
-	      // Toggle LED2 sebagai indikasi kegagalan
-	      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_14);  // LED2 Blink (Gagal)
-	    }
-
-	    // Delay untuk mencegah task berjalan terus-menerus
-	    osDelay(1000);
+	    osDelay(1);
 	  }
 	  /* USER CODE END StartDefaultTask */
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartTask02 */
+/* USER CODE BEGIN Header_green_led */
 /**
-* @brief Function implementing the Task02 thread.
+* @brief Function implementing the GreenLEDTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask02 */
-void StartTask02(void const * argument)
+/* USER CODE END Header_green_led */
+void green_led(void const * argument)
 {
-  /* USER CODE BEGIN StartTask02 */
+  /* USER CODE BEGIN green_led */
   /* Infinite loop */
 	for(;;)
 	    {
-	        // Attempt to acquire semaphore with a wait time of 100ms
-	        if(osSemaphoreWait(CriticalResourceSemaphoreHandle, 100) == osOK)
-	        {
-	            // Access critical resource
-	            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); // LED1 ON
-	            printf("Task2 accessing critical resource...\n");
-	            HAL_Delay(1000);  // Simulate critical resource usage
+	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET);  // Nyalakan Green LED
 
-	            // Release semaphore after using resource
+	        if (osSemaphoreWait(CriticalResourceSemaphoreHandle, osWaitForever) == osOK)
+	        {
+	            accessSharedData();
 	            osSemaphoreRelease(CriticalResourceSemaphoreHandle);
-	            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // LED1 OFF
-	            printf("Task2 finished accessing critical resource.\n");
-	        }
-	        else
-	        {
-	            // Semaphore not acquired, indicate with LED2
-	            HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_14); // LED2 Blink
-	            printf("Task2 could not access resource (timeout).\n");
 	        }
 
-	        osDelay(1000); // Delay to prevent continuous loop
+	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);  // Matikan Green LED
+	        osDelay(200);
 	    }
-  /* USER CODE END StartTask02 */
+  /* USER CODE END green_led */
 }
+
+/* USER CODE BEGIN Header_red_led */
+/**
+* @brief Function implementing the RedLEDTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_red_led */
+void red_led(void const * argument)
+{
+  /* USER CODE BEGIN red_led */
+  /* Infinite loop */
+	for(;;)
+	    {
+	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);  // Nyalakan Red LED
+
+	        if (osSemaphoreWait(CriticalResourceSemaphoreHandle, osWaitForever) == osOK)
+	        {
+	            accessSharedData();
+	            osSemaphoreRelease(CriticalResourceSemaphoreHandle);
+	        }
+
+	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);  // Matikan Red LED
+	        osDelay(550);
+	    }
+  /* USER CODE END red_led */
+}
+
+/* USER CODE BEGIN Header_yellow_led */
+/**
+* @brief Function implementing the YellowLEDTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_yellow_led */
+void yellow_led(void const * argument)
+{
+  /* USER CODE BEGIN yellow_led */
+  /* Infinite loop */
+	for(;;)
+		    {
+		        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);  // Toggle Orange LED
+		        osDelay(50);  // 10 Hz flashing rate
+		    }
+  /* USER CODE END yellow_led */
+}
+
+void accessSharedData(void)
+{
+    if (startFlag == 1)
+    {
+        startFlag = 0;  // Set flag ke 0
+    }
+    else
+    {
+        // Nyalakan LED Biru jika konflik
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET);
+    }
+
+    // Simulasi operasi baca/tulis selama 1000 ms
+    osDelay(1000);
+
+    // Set flag kembali ke 1
+    startFlag = 1;
+
+    // Matikan LED Biru
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
+}
+
+
 
 /**
   * @brief  This function is executed in case of error occurrence.
