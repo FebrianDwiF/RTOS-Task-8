@@ -32,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define WaitTimeMilliseconds 0
+
 
 /* USER CODE END PD */
 
@@ -42,8 +42,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-UART_HandleTypeDef huart1;
-
 osThreadId defaultTaskHandle;
 osThreadId GreenLEDTaskHandle;
 osThreadId RedLEDTaskHandle;
@@ -51,12 +49,12 @@ osThreadId YellowLEDTaskHandle;
 osSemaphoreId CriticalResourceSemaphoreHandle;
 /* USER CODE BEGIN PV */
 volatile uint8_t startFlag = 1;
+volatile uint16_t WaitTimeMilliseconds = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_USART1_UART_Init(void);
 void StartDefaultTask(void const * argument);
 void green_led(void const * argument);
 void red_led(void const * argument);
@@ -68,10 +66,6 @@ void yellow_led(void const * argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int __io_putchar(int ch) {
-    HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
-    return ch;
-}
 /* USER CODE END 0 */
 
 /**
@@ -103,7 +97,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -204,39 +197,6 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART1_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART1_Init 0 */
-
-  /* USER CODE END USART1_Init 0 */
-
-  /* USER CODE BEGIN USART1_Init 1 */
-
-  /* USER CODE END USART1_Init 1 */
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART1_Init 2 */
-
-  /* USER CODE END USART1_Init 2 */
-
-}
-
-/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -302,11 +262,10 @@ void green_led(void const * argument)
 	    {
 	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET);  // Nyalakan Green LED
 
-	        if (osSemaphoreWait(CriticalResourceSemaphoreHandle, osWaitForever) == osOK)
-	        {
-	            accessSharedData();
-	            osSemaphoreRelease(CriticalResourceSemaphoreHandle);
-	        }
+	        osSemaphoreWait(CriticalResourceSemaphoreHandle, WaitTimeMilliseconds);
+			accessSharedData();
+			osSemaphoreRelease(CriticalResourceSemaphoreHandle);
+			osDelay(200);
 
 	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);  // Matikan Green LED
 	        osDelay(200);
@@ -329,11 +288,12 @@ void red_led(void const * argument)
 	    {
 	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);  // Nyalakan Red LED
 
-	        if (osSemaphoreWait(CriticalResourceSemaphoreHandle, osWaitForever) == osOK)
-	        {
+	        osSemaphoreWait(CriticalResourceSemaphoreHandle, WaitTimeMilliseconds);
+
 	            accessSharedData();
+
 	            osSemaphoreRelease(CriticalResourceSemaphoreHandle);
-	        }
+	            osDelay(550);
 
 	        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);  // Matikan Red LED
 	        osDelay(550);
@@ -341,6 +301,35 @@ void red_led(void const * argument)
   /* USER CODE END red_led */
 }
 
+void accessSharedData(void) {
+    if (startFlag == 1) {
+        // Set Start flag to Down to indicate resource is in use
+        startFlag = 0;
+    } else {
+        // Resource contention: Turn on Blue LED
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET);
+    }
+
+    // Simulate read/write operations with a delay of 500 milliseconds
+//    SimulateReadWriteOperation();
+    HAL_Delay(500);
+
+    // Set Start flag back to Up to indicate resource is free
+    startFlag = 1;
+
+    // Turn off Blue LED (if it was turned on during contention)
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
+}
+
+void SimulateReadWriteOperation(void) {
+    volatile uint32_t delay_count = 0;
+    const uint32_t delay_target = 2000000; // Adjust this value to approximate 500 ms
+
+    // Dummy loop to simulate processing time
+    for (delay_count = 0; delay_count < delay_target; delay_count++) {
+        __asm("nop"); // No Operation: Keeps the processor busy without changing code behavior
+    }
+}
 /* USER CODE BEGIN Header_yellow_led */
 /**
 * @brief Function implementing the YellowLEDTask thread.
@@ -360,29 +349,26 @@ void yellow_led(void const * argument)
   /* USER CODE END yellow_led */
 }
 
-void accessSharedData(void)
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM4 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    if (startFlag == 1)
-    {
-        startFlag = 0;  // Set flag ke 0
-    }
-    else
-    {
-        // Nyalakan LED Biru jika konflik
-        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET);
-    }
+  /* USER CODE BEGIN Callback 0 */
 
-    // Simulasi operasi baca/tulis selama 1000 ms
-    osDelay(1000);
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM4) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
 
-    // Set flag kembali ke 1
-    startFlag = 1;
-
-    // Matikan LED Biru
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
+  /* USER CODE END Callback 1 */
 }
-
-
 
 /**
   * @brief  This function is executed in case of error occurrence.
