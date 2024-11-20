@@ -1,4 +1,3 @@
-
 ## **Judul Proyek**
 Kontrol Multithreading LED dengan RTOS pada STM32
 
